@@ -88,20 +88,43 @@ public class Router extends Device {
 	}
 	public void InitRouteTable() {
 		//make a route table with entries to associated interfaces
-		for (String name : this.interfaces.keySet()) {
+		/*for (String name : this.interfaces.keySet()) {
 			int mask = this.interfaces.get(name).getSubnetMask();
-			routeTable.insert(this.interfaces.get(name).getIpAddress() & this.interfaces.get(name).getSubnetMask(), 0, mask, this.interfaces.get(name), 1);
+			routeTable.insert(this.interfaces.get(name).getIpAddress() & mask, 0, mask, this.interfaces.get(name), 1);
+		}
+		for (Iface ifaces : this.interfaces.values())
+		{
+			sendRequestResponseRIP(ifaces, true, true);
 		}
 		System.out.println(this.routeTable.toString());
 		this.timer = new Timer();
-		timer.scheduleAtFixedRate(new update(), 1000, 1000);
+		timer.scheduleAtFixedRate(new update(), 1000, 1000);*/
+		for (Iface ifaces : this.interfaces.values())
+		{
+			//int dstIp, int gwIp, int maskIp, Iface ifac
+			int mask = ifaces.getSubnetMask();
+			int destination = ifaces.getIpAddress() & mask;
+
+			this.routeTable.insert(destination, 0, mask, ifaces, 1);
+		}
+		System.out.println(this.routeTable.toString());
+
+		// Send initial RIP update request
+		for (Iface ifaces : this.interfaces.values())
+		{
+			this.sendRequestResponseRIP(ifaces, true, true);
+		}
+
+		this.timer = new Timer();
+		this.timer.scheduleAtFixedRate(new update(), 10000, 10000);
 	}
 
 	/*sending rip request/response*/
-	public void sendRequestResponseRIP(Iface inIface, boolean multiOrBroad, boolean requestUnresp) {
+	//clear
+	public void sendRequestResponseRIP(Iface inIface, boolean broadcast, boolean isRequest) {
 
 		//make a new ether packet
-		Ethernet etherPacket = new Ethernet();
+		/*Ethernet etherPacket = new Ethernet();
 		IPv4 ipPacket = new IPv4();
 		UDP udpPacket = new UDP();
 		RIPv2 ripPacket = new RIPv2();
@@ -112,6 +135,7 @@ public class Router extends Device {
 		//enter UDP and rip credentials into the packets
 		etherPacket.setEtherType(Ethernet.TYPE_IPv4);
 		etherPacket.setSourceMACAddress("FF:FF:FF:FF:FF:FF");
+		//ipPacket.setSourceAddress(inIface.getIpAddress());
 		if (multiOrBroad) {
 			etherPacket.setDestinationMACAddress("FF:FF:FF:FF:FF:FF");
 		}else{
@@ -150,6 +174,51 @@ public class Router extends Device {
 		System.out.println("val Ethernet: &&&&&&& " + etherPacket);
 		sendPacket(etherPacket, inIface);
 
+*/
+		Ethernet ether = new Ethernet();
+		IPv4 ip = new IPv4();
+		UDP udpPacket = new UDP();
+		RIPv2 ripPacket = new RIPv2();
+		ether.setPayload(ip);
+		ip.setPayload(udpPacket);
+		udpPacket.setPayload(ripPacket);
+
+		ether.setEtherType(Ethernet.TYPE_IPv4);
+		ether.setSourceMACAddress("FF:FF:FF:FF:FF:FF");
+		if(broadcast)
+			ether.setDestinationMACAddress("FF:FF:FF:FF:FF:FF");
+		else
+			ether.setDestinationMACAddress(inIface.getMacAddress().toBytes());
+
+		ip.setTtl((byte)64);
+		ip.setVersion((byte)4);
+		ip.setProtocol(IPv4.PROTOCOL_UDP);
+		if(broadcast)
+			ip.setDestinationAddress("224.0.0.9");
+		else
+			ip.setDestinationAddress(inIface.getIpAddress());
+
+		udpPacket.setSourcePort(UDP.RIP_PORT);
+		udpPacket.setDestinationPort(UDP.RIP_PORT);
+
+		ripPacket.setCommand(isRequest ? RIPv2.COMMAND_REQUEST : RIPv2.COMMAND_RESPONSE);
+
+		for (RouteEntry entry : this.routeTable.getEntries())
+		{
+			int address = entry.getDestinationAddress();
+			int mask = entry.getMaskAddress();
+			int next = inIface.getIpAddress();
+			int cost = entry.getMetric();
+
+			RIPv2Entry ripEntry = new RIPv2Entry(address, mask, cost);
+			ripEntry.setNextHopAddress(next);
+			ripPacket.addEntry(ripEntry);
+		}
+
+		ether.serialize();
+		this.sendPacket(ether, inIface);
+		return;
+
 	}
 	//basic sanitary checks for IP packet and handles the cases for packet drop
 	public boolean sanitaryChecksIP(Ethernet etherPacket, Iface inIface) {
@@ -181,14 +250,14 @@ public class Router extends Device {
 		ipPacket.resetChecksum();
 
 		// Check if packet is destined for one of router's interfaces
-		for (Iface iface : this.interfaces.values()) {
+		/*for (Iface iface : this.interfaces.values()) {
 			if (ipPacket.getDestinationAddress() == iface.getIpAddress()) {
 				return false;
 			}
-		}
-		if (ipPacket.getProtocol() != IPv4.PROTOCOL_UDP) {
+		}*/
+		/*if (ipPacket.getProtocol() != IPv4.PROTOCOL_UDP) {
 			return false;
-		}
+		}*/
 		return true;
 	}
 
@@ -215,19 +284,20 @@ public class Router extends Device {
 		/*fist do all the necessary sanity checks from p2 and then decide whether to take in entries from this or not
 		 * if the rip command is of type request send response accordingly
 		 * */
+		/*System.out.println("IT SHOULD DO THIS! $$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$");
 		IPv4 ipPacket = (IPv4) etherPacket.getPayload();
 		UDP udpPacket = (UDP) ipPacket.getPayload();
 		RIPv2 ripPacket = (RIPv2) udpPacket.getPayload();
 		IPv4 temp = new IPv4();
 		temp.setDestinationAddress("224.0.0.9");
 		if (sanitaryChecksIP(etherPacket, inIface) && sanitaryChecksUDP(ipPacket)) {
+			System.out.println("IT SHOULD DO THIS! $$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$");
 			if (ripPacket.getCommand() == RIPv2.COMMAND_REQUEST) {
 				if (ipPacket.getDestinationAddress() == temp.getDestinationAddress() && etherPacket.getDestinationMAC() == MACAddress.valueOf("FF:FF:FF:FF:FF:FF")) {
 					sendRequestResponseRIP(inIface, true, false);
 				}
 			}
 		}
-		temp = null;
 
 		//check all the entries and decide whether to keep entries or update them accordingly
 
@@ -261,6 +331,60 @@ public class Router extends Device {
 					sendRequestResponseRIP(inIface, false, false);
 				}
 			}
+		}*/
+		if (etherPacket.getEtherType() != Ethernet.TYPE_IPv4)
+		{ return; }
+		IPv4 ip = (IPv4)etherPacket.getPayload();
+		if (ip.getProtocol() != IPv4.PROTOCOL_UDP)
+		{ return; }
+		UDP UdpData = (UDP)ip.getPayload();
+		// Verify UDP checksum
+		short origCksum = UdpData.getChecksum();
+		UdpData.resetChecksum();
+		byte[] serialized = UdpData.serialize();
+		UdpData.deserialize(serialized, 0, serialized.length);
+		short calcCksum = UdpData.getChecksum();
+		if (origCksum != calcCksum)
+		{ return; }
+		// Verify UDP port
+		if (UdpData.getDestinationPort() != UDP.RIP_PORT)
+		{ return; }
+
+		RIPv2 rip = (RIPv2)UdpData.getPayload();
+		if (rip.getCommand() == RIPv2.COMMAND_REQUEST)
+		{
+			if (etherPacket.getDestinationMAC().toLong() == MACAddress.valueOf("FF:FF:FF:FF:FF:FF").toLong() && ip.getDestinationAddress() == IPv4.toIPv4Address("224.0.0.9"));
+			{
+				this.sendRequestResponseRIP(inIface, true, false);
+				return;
+			}
+		}
+		/*else
+		{
+			System.out.println("Error in RIP request");
+			return;
+		}*/
+
+		boolean updated = false;
+
+		for (RIPv2Entry ripEntry : rip.getEntries())
+		{
+			int address = ripEntry.getAddress();
+			int mask = ripEntry.getSubnetMask();
+			int cost = ripEntry.getMetric() + 1;
+			int next = ripEntry.getNextHopAddress();
+
+			ripEntry.setMetric(cost);
+			RouteEntry entry = this.routeTable.lookup(address);
+
+			if (null == entry || entry.getMetric() > cost)
+			{
+				this.routeTable.insert(address, next, mask, inIface, cost);
+				for (Iface ifaces : this.interfaces.values())
+				{
+					this.sendRequestResponseRIP(inIface, false, false);
+				}
+			}
 		}
 	}
 
@@ -279,12 +403,7 @@ public class Router extends Device {
 	 * 3-2: interfaces
 	 *
 	 * */
-	public void pollRouteTable() {
-		long currTime = System.currentTimeMillis();
-		while (true) {
 
-		}
-	}
 	/*
 	 * make a new method which makes the required RIP packet and encapsultes it into UDP and etherpacket
 	 * accordingly ----- This is a convenience function to reduce clutter in handle packet and increase reuse.'
@@ -329,7 +448,7 @@ public class Router extends Device {
 	public void handlePacket(Ethernet etherPacket, Iface inIface) {
 		System.out.println("*** -> Received packet: " +
 				etherPacket.toString().replace("\n", "\n\t"));
-
+		//System.out.println("*******************************HANDLE PACK ENTRY NOT HANDLE IP**********************************");
 		/********************************************************************/
 		/* TODO: Handle packets                                             */
 
@@ -343,15 +462,50 @@ public class Router extends Device {
 		/********************************************************************/
 	}
 
+	/*trial senderror function*//*
+
+
+
 	/*
 	 * sanitary checks for the incoming IP packet
 	 * */
 	private void handleIpPacket(Ethernet etherPacket, Iface inIface) {
+
 		// Make sure it's an IP packet
 		// Do route lookup and forward
+		boolean normalPacketOrRIP = true;
+		System.out.println("*******************************HANDLE IP PACKET ENTRY**********************************");
 		if (sanitaryChecksIP(etherPacket, inIface)) {
-			this.forwardIpPacket(etherPacket, inIface);
-		}else{
+			System.out.println("*******************************HANDLE ip PACKET AFTER SANITARY CHECKS**********************************");
+			System.out.println("0: ---> cleared basic IP sanitation check");
+			IPv4 ipPacket = (IPv4) etherPacket.getPayload();
+			for (String name : this.interfaces.keySet()) {
+
+				if (ipPacket.getDestinationAddress() == this.interfaces.get(name).getIpAddress()) {
+					normalPacketOrRIP = false;
+				}
+					short protocol = ipPacket.getProtocol();
+					System.out.println("ipPacket protol: " + protocol);
+					if (protocol == IPv4.PROTOCOL_UDP) {
+
+						System.out.println("2: ---> protocol equal to UDP");
+						UDP udpPacket = new UDP();
+						udpPacket = (UDP) ipPacket.getPayload();
+						IPv4 temp = new IPv4();
+						temp.setDestinationAddress("224.0.0.9");
+						if (sanitaryChecksUDP(ipPacket) && ((temp.getDestinationAddress() == ipPacket.getDestinationAddress()) || (ipPacket.getDestinationAddress()==this.interfaces.get(name).getIpAddress()))) {
+							normalPacketOrRIP = false;
+							System.out.println("3: ---> sending the packet to handleRIPPacket");
+							handleRipRequestResponse(etherPacket, inIface);
+							System.out.println("*******************************END**********************************");
+						}
+					}
+			}
+			System.out.println("FATAL ERROR CHECK: IP VALUE: " + ipPacket.getDestinationAddress() + " normalPacketOrRIP: " + normalPacketOrRIP);
+			if (normalPacketOrRIP) {
+				this.forwardIpPacket(etherPacket, inIface);
+			}
+		} else {
 			return;
 		}
 
