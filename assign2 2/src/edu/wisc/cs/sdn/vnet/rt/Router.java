@@ -386,6 +386,9 @@ public class Router extends Device {
 				}
 			}
 		}
+		System.out.println("##################Route Table####################");
+		System.out.println(this.routeTable.toString());
+		System.out.println("##################Route Table####################");
 	}
 
 
@@ -493,7 +496,8 @@ public class Router extends Device {
 						udpPacket = (UDP) ipPacket.getPayload();
 						IPv4 temp = new IPv4();
 						temp.setDestinationAddress("224.0.0.9");
-						if (sanitaryChecksUDP(ipPacket) && ((temp.getDestinationAddress() == ipPacket.getDestinationAddress()) || (ipPacket.getDestinationAddress()==this.interfaces.get(name).getIpAddress()))) {
+						if (sanitaryChecksUDP(ipPacket) && ((temp.getDestinationAddress() == ipPacket.getDestinationAddress())
+								|| (ipPacket.getDestinationAddress()==this.interfaces.get(name).getIpAddress()))) {
 							normalPacketOrRIP = false;
 							System.out.println("3: ---> sending the packet to handleRIPPacket");
 							handleRipRequestResponse(etherPacket, inIface);

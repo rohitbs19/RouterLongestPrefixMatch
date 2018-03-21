@@ -263,7 +263,7 @@ public class RouteTable
 			if (0 == this.entries.size())
 			{ return " WARNING: route table empty"; }
 
-			String result = "Destination\tGateway\t\tMask\t\tIface\n";
+			String result = "Destination\tGateway\t\tMask\t\tIface\t\tMetric\n";
 			for (RouteEntry entry : entries)
 			{ result += entry.toString()+"\n"; }
 			return result;
@@ -275,3 +275,4 @@ public class RouteTable
     }
 
 }
+
