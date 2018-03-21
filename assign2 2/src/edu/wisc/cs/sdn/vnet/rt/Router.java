@@ -60,15 +60,12 @@ public class Router extends Device {
 		//in our program this will initialize the route table by adding entries to
 		// the subnets directly connected to the router.
 		if (routeTableFile != null) {
-
-
+			System.out.println("fileName val *************** " + routeTableFile);
 			if (!routeTable.load(routeTableFile, this)) {
 				System.err.println("Error setting up routing table from file "
 						+ routeTableFile);
 				System.exit(1);
 			}
-		} else {
-			InitRouteTable();
 		}
 		//after the initialization we need to send a RIP request out of all the router's interfaces
 		System.out.println("Loaded static route table");
@@ -76,6 +73,8 @@ public class Router extends Device {
 		System.out.print(this.routeTable.toString());
 		System.out.println("-------------------------------------------------");
 	}
+	/*
+	* timer schedules the poll function call as mentioned in the init function */
 	class update extends TimerTask {
 		public void run() {
 			poll();
@@ -111,18 +110,27 @@ public class Router extends Device {
 		udpPacket.setPayload(ripPacket);
 		//encapsulation done
 		//enter UDP and rip credentials into the packets
-		udpPacket.setSourcePort(UDP.RIP_PORT);
-		udpPacket.setDestinationPort(UDP.RIP_PORT);
+		etherPacket.setEtherType(Ethernet.TYPE_IPv4);
+		etherPacket.setSourceMACAddress("FF:FF:FF:FF:FF:FF");
+		if (multiOrBroad) {
+			etherPacket.setDestinationMACAddress("FF:FF:FF:FF:FF:FF");
+		}else{
+			etherPacket.setDestinationMACAddress(inIface.getMacAddress().toBytes());
+		}
+
 		ipPacket.setProtocol(IPv4.PROTOCOL_UDP);
 		ipPacket.setVersion((byte) 4);
 		ipPacket.setTtl((byte) 15);
 		if (multiOrBroad) {
-			etherPacket.setDestinationMACAddress("FF:FF:FF:FF:FF:FF");
+			//etherPacket.setDestinationMACAddress("FF:FF:FF:FF:FF:FF");
 			ipPacket.setDestinationAddress("244.0.0.9");
 		} else {
-			etherPacket.setDestinationMACAddress(inIface.getMacAddress().toString());
+//			etherPacket.setDestinationMACAddress(inIface.getMacAddress().toString());
 			ipPacket.setDestinationAddress(inIface.getIpAddress());
 		}
+
+		udpPacket.setSourcePort(UDP.RIP_PORT);
+		udpPacket.setDestinationPort(UDP.RIP_PORT);
 
 		if (requestUnresp) {
 			ripPacket.setCommand(RIPv2.COMMAND_REQUEST);
@@ -139,10 +147,11 @@ public class Router extends Device {
 			ripPacket.addEntry(newEntry);
 		}
 		etherPacket.serialize();
+		System.out.println("val Ethernet: &&&&&&& " + etherPacket);
 		sendPacket(etherPacket, inIface);
 
 	}
-
+	//basic sanitary checks for IP packet and handles the cases for packet drop
 	public boolean sanitaryChecksIP(Ethernet etherPacket, Iface inIface) {
 		if (etherPacket.getEtherType() != Ethernet.TYPE_IPv4) {
 			return false;
@@ -392,3 +401,4 @@ public class Router extends Device {
 		this.sendPacket(etherPacket, outIface);
 	}
 }
+
