@@ -77,7 +77,10 @@ public class Router extends Device {
 	* timer schedules the poll function call as mentioned in the init function */
 	class update extends TimerTask {
 		public void run() {
+			System.out.println("-------------------------------------------------");
+			System.out.println("*** POLL INITIATED SEND RIP REQUESTS ***");
 			poll();
+			System.out.println("-------------------------------------------------");
 		}
 	}
 
@@ -99,6 +102,8 @@ public class Router extends Device {
 		System.out.println(this.routeTable.toString());
 		this.timer = new Timer();
 		timer.scheduleAtFixedRate(new update(), 1000, 1000);*/
+
+		/* FIRST INSERT ALL THE IMMEDIATE NEIGHBORS*/
 		for (Iface ifaces : this.interfaces.values())
 		{
 			//int dstIp, int gwIp, int maskIp, Iface ifac
@@ -107,8 +112,13 @@ public class Router extends Device {
 
 			this.routeTable.insert(destination, 0, mask, ifaces, 1);
 		}
+		System.out.println("*** ROUTE TABLE INITIALIZED AFTER: IMMEDIATE INTERFACES ARE ADDED ***");
+		System.out.println("################## AFTER Route Table UPDATE####################");
 		System.out.println(this.routeTable.toString());
+		System.out.println("################## INITIAL Route Table UPDATE####################");
 
+
+		System.out.println("*** SENT RIP PACKETS TO ALL INTERFACES IN INIT ***");
 		// Send initial RIP update request
 		for (Iface ifaces : this.interfaces.values())
 		{
@@ -175,6 +185,9 @@ public class Router extends Device {
 		sendPacket(etherPacket, inIface);
 
 */
+		System.out.println("-------------------------------------------------");
+		System.out.println("*** SEND RIP PACKET INITIATED ***");
+		System.out.println("-------------------------------------------------");
 		Ethernet ether = new Ethernet();
 		IPv4 ip = new IPv4();
 		UDP udpPacket = new UDP();
@@ -202,7 +215,7 @@ public class Router extends Device {
 		udpPacket.setDestinationPort(UDP.RIP_PORT);
 
 		ripPacket.setCommand(isRequest ? RIPv2.COMMAND_REQUEST : RIPv2.COMMAND_RESPONSE);
-
+		// enter the rip values into the packet
 		for (RouteEntry entry : this.routeTable.getEntries())
 		{
 			int address = entry.getDestinationAddress();
@@ -216,9 +229,10 @@ public class Router extends Device {
 		}
 
 		ether.serialize();
+		System.out.println("-------------------------------------------------");
+		System.out.println("*** PACKET SENT " + " THROUGH " + inIface.getName() + " ***");
+		System.out.println("-------------------------------------------------");
 		this.sendPacket(ether, inIface);
-		return;
-
 	}
 	//basic sanitary checks for IP packet and handles the cases for packet drop
 	public boolean sanitaryChecksIP(Ethernet etherPacket, Iface inIface) {
@@ -332,14 +346,15 @@ public class Router extends Device {
 				}
 			}
 		}*/
-		if (etherPacket.getEtherType() != Ethernet.TYPE_IPv4)
-		{ return; }
+
+		/*if (etherPacket.getEtherType() != Ethernet.TYPE_IPv4)
+		{ return; }*/
 		IPv4 ip = (IPv4)etherPacket.getPayload();
-		if (ip.getProtocol() != IPv4.PROTOCOL_UDP)
-		{ return; }
+		/*if (ip.getProtocol() != IPv4.PROTOCOL_UDP)
+		{ return; }*/
 		UDP UdpData = (UDP)ip.getPayload();
 		// Verify UDP checksum
-		short origCksum = UdpData.getChecksum();
+		/*short origCksum = UdpData.getChecksum();
 		UdpData.resetChecksum();
 		byte[] serialized = UdpData.serialize();
 		UdpData.deserialize(serialized, 0, serialized.length);
@@ -349,7 +364,7 @@ public class Router extends Device {
 		// Verify UDP port
 		if (UdpData.getDestinationPort() != UDP.RIP_PORT)
 		{ return; }
-
+*/
 		RIPv2 rip = (RIPv2)UdpData.getPayload();
 		if (rip.getCommand() == RIPv2.COMMAND_REQUEST)
 		{
@@ -359,14 +374,9 @@ public class Router extends Device {
 				return;
 			}
 		}
-		/*else
-		{
-			System.out.println("Error in RIP request");
-			return;
-		}*/
-
-		boolean updated = false;
-
+		System.out.println("##################BEFORE UPDATE Route Table####################");
+		System.out.println(this.routeTable.toString());
+		System.out.println("##################BEFORE UPDATE Route Table####################");
 		for (RIPv2Entry ripEntry : rip.getEntries())
 		{
 			int address = ripEntry.getAddress();
@@ -374,21 +384,38 @@ public class Router extends Device {
 			int cost = ripEntry.getMetric() + 1;
 			int next = ripEntry.getNextHopAddress();
 
-			ripEntry.setMetric(cost);
+			//ripEntry.setMetric(cost);
+		
 			RouteEntry entry = this.routeTable.lookup(address);
+			if(entry!=null){
+				System.out.println("--------------------------------------------------------");
+				System.out.println("RIP entry in message metric: " + cost);
+				System.out.println("entry in routers Routing Table: " + entry.getMetric());
 
-			if (null == entry || entry.getMetric() > cost)
+				System.out.println("--------------------------------------------------------");
+			}
+			if (null == entry)
 			{
 				this.routeTable.insert(address, next, mask, inIface, cost);
 				for (Iface ifaces : this.interfaces.values())
 				{
 					this.sendRequestResponseRIP(inIface, false, false);
+				}/*
+
+					MAY CAUSE AN ERROR
+
+				*/
+
+			} else if (entry.getMetric() > cost) {
+				this.routeTable.insert(address, next, mask, inIface, cost);
+				for (Iface ifaces : this.interfaces.values()) {
+					this.sendRequestResponseRIP(inIface, false, false);
 				}
 			}
 		}
-		System.out.println("##################Route Table####################");
+		System.out.println("################## AFTER UPDATE Route Table####################");
 		System.out.println(this.routeTable.toString());
-		System.out.println("##################Route Table####################");
+		System.out.println("##################AFTER UPDATE Route Table####################");
 	}
 
 
@@ -477,25 +504,35 @@ public class Router extends Device {
 		// Make sure it's an IP packet
 		// Do route lookup and forward
 		boolean normalPacketOrRIP = true;
-		System.out.println("*******************************HANDLE IP PACKET ENTRY**********************************");
+		IPv4 ipPacket = (IPv4) etherPacket.getPayload();
+		System.out.println("-------------------------------------------------");
+		System.out.println("*** HANDLE PACKET UNDER CONTROL" + "IP PACKET ADDR: "
+				+ ipPacket.getDestinationAddress() + " ***");
+
 		if (sanitaryChecksIP(etherPacket, inIface)) {
-			System.out.println("*******************************HANDLE ip PACKET AFTER SANITARY CHECKS**********************************");
-			System.out.println("0: ---> cleared basic IP sanitation check");
-			IPv4 ipPacket = (IPv4) etherPacket.getPayload();
+			System.out.println("*** 1: BASIC SANITARY IP CHECKS DONE - IFACE AND - UDP CHECKS ***");
+
+
 			for (String name : this.interfaces.keySet()) {
 
 				if (ipPacket.getDestinationAddress() == this.interfaces.get(name).getIpAddress()) {
 					normalPacketOrRIP = false;
 				}
-					short protocol = ipPacket.getProtocol();
-					System.out.println("ipPacket protol: " + protocol);
+				short protocol = ipPacket.getProtocol();
+				System.out.println("*** ipPacket protocol: " + protocol + " ***");
 					if (protocol == IPv4.PROTOCOL_UDP) {
 
-						System.out.println("2: ---> protocol equal to UDP");
-						UDP udpPacket = new UDP();
-						udpPacket = (UDP) ipPacket.getPayload();
+						System.out.println("*** 2: ---> protocol equal to UDP ***");
+
 						IPv4 temp = new IPv4();
 						temp.setDestinationAddress("224.0.0.9");
+						if (ipPacket.getDestinationAddress() == this.interfaces.get(name).getIpAddress()) {
+							System.out.println("-------------------------------------------------");
+							System.out.println("*** DESTINATION ADDR IS EQUAL TO INTERFACE ADDR ***");
+
+
+							System.out.println("-------------------------------------------------");
+						}
 						if (sanitaryChecksUDP(ipPacket) && ((temp.getDestinationAddress() == ipPacket.getDestinationAddress())
 								|| (ipPacket.getDestinationAddress()==this.interfaces.get(name).getIpAddress()))) {
 							normalPacketOrRIP = false;
@@ -505,8 +542,13 @@ public class Router extends Device {
 						}
 					}
 			}
+			System.out.println("-------------------------------------------------");
 			System.out.println("FATAL ERROR CHECK: IP VALUE: " + ipPacket.getDestinationAddress() + " normalPacketOrRIP: " + normalPacketOrRIP);
+			System.out.println("-------------------------------------------------");
 			if (normalPacketOrRIP) {
+				System.out.println("-------------------------------------------------");
+				System.out.println(" *** FORWARD PACKET IP value " + ipPacket.getDestinationAddress() + " ***");
+				System.out.println("-------------------------------------------------");
 				this.forwardIpPacket(etherPacket, inIface);
 			}
 		} else {

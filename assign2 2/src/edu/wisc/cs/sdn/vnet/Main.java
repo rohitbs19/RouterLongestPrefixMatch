@@ -89,6 +89,7 @@ public class Main
 			if (routeTableFile != null)
 			{ ((Router)dev).loadRouteTable(routeTableFile); }
 			else {
+				System.out.println("*** ROUTE TABLE HAS BEEN INITIALIZED IN MAIN ***");
 				((Router)dev).InitRouteTable();
 			}
 			
@@ -114,4 +115,4 @@ public class Main
 				DEFAULT_SERVER, DEFAULT_PORT));
 	}
 }
-   
+
