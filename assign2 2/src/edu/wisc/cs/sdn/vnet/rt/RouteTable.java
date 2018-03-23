@@ -8,7 +8,7 @@ import java.util.LinkedList;
 import java.util.List;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
-
+import java.util.concurrent.CopyOnWriteArrayList;
 import net.floodlightcontroller.packet.IPv4;
 
 import edu.wisc.cs.sdn.vnet.Iface;
@@ -20,13 +20,13 @@ import edu.wisc.cs.sdn.vnet.Iface;
 public class RouteTable
 {
 	/** Entries in the route table */
-	private List<RouteEntry> entries;
+	private CopyOnWriteArrayList<RouteEntry> entries;
 
 	/**
 	 * Initialize an empty route table.
 	 */
 	public RouteTable()
-	{ this.entries = new LinkedList<RouteEntry>(); }
+	{ this.entries = new CopyOnWriteArrayList<RouteEntry>(); }
 
 	/**
 	 * Lookup the route entry that matches a given IP address.
@@ -177,6 +177,9 @@ public class RouteTable
 
 		RouteEntry entry = new RouteEntry(dstIp, gwIp, maskIp, iface);
 		entry.setMetric(metric);
+		if(gwIp!=0) {
+			entry.setTtl(System.currentTimeMillis());
+		}
 		synchronized (this.entries) {
 			this.entries.add(entry);
 		}
@@ -225,14 +228,22 @@ public class RouteTable
 	public boolean update(int dstIp, int maskIp, int gwIp,
 						  Iface iface,int metric)
 	{
+		System.out.println("ENTERED THIS FUCKING UPDATE FUNCTION &&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&");
+
 		synchronized(this.entries)
 		{
+			System.out.println("ENTERED THIS FUCKING UPDATE FUNCTION &#############################################################");
 			RouteEntry entry = this.find(dstIp, maskIp);
 			if (null == entry)
 			{ return false; }
+			//entry.setTtl(System.currentTimeMillis());
+			System.out.println("ENTERED THIS FUCKING UPDATE FUNCTION &^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^");
+			System.out.print("**************** passed metric " +metric + "entry metric before set " + entry.getMetric() );
+
+			entry.setMetric(metric);
+			System.out.print("**************** passed metric " +metric + "entry metric AFTER set " + entry.getMetric() );
 			entry.setGatewayAddress(gwIp);
 			entry.setInterface(iface);
-			entry.setMetric(metric);
 		}
 		return true;
 	}
@@ -275,4 +286,5 @@ public class RouteTable
     }
 
 }
+
 

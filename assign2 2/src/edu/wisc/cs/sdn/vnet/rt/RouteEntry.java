@@ -18,6 +18,7 @@ public class RouteEntry
 	/** Subnet mask */
 	private int maskAddress;
 	private int metric;
+	private long ttl;
 
 	/** Router interface out which packets should be sent to reach
 	 * the destination or gateway */
@@ -47,6 +48,13 @@ public class RouteEntry
 	public int getDestinationAddress()
 	{ return this.destinationAddress; }
 
+	public long getTtl() {
+		return this.ttl;
+	}
+
+	public void setTtl(long ttl) {
+		this.ttl = ttl;
+	}
 	/**
 	 * @return gateway IP address
 	 */
@@ -90,4 +98,5 @@ public class RouteEntry
 				String.valueOf(this.metric));
 	}
 }
+
 
